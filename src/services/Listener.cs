@@ -1,6 +1,8 @@
 ﻿using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Configuration;
+using Modmail.logging;
+using Modmail.utils;
 
 namespace Modmail.services
 {
@@ -11,6 +13,8 @@ namespace Modmail.services
 
         public delegate Task AsyncListener<in TEventArgs>(TEventArgs args);
         public event AsyncListener<SocketMessage>? MessageReceived;
+
+        private const string OPEN = "\uD83D\uDCEC"; // 📬
 
         public Listener(DiscordSocketClient client, IConfiguration configuration)
         {
@@ -62,16 +66,23 @@ namespace Modmail.services
                 });
 
                 // Send a greeting message to the user
-                var greeting = new EmbedBuilder().WithTitle("Custom Greeting Message")
+                EmbedBuilder greeting = new EmbedBuilder().WithTitle("Custom Greeting Message")
                                                  .WithColor(0xFF4400) // red
                                                  .WithDescription($"Thank you for contacting the {guild.Name} moderation team, someone will " +
                                                                   $"respond as soon as they are able to. In the meantime if you have not fully " +
                                                                   $"explained your issue, please do so now.")
-                                                 .WithFooter($"{guild.Name} | {guild.Id} • {message.Timestamp.ToLocalTime().ToString("MM/dd/yyyy hh:mm tt")}");
+                                                 .WithFooter(LogUtil.FooterFormat(guild.Name, guild.Id, message.Timestamp));
                 await author.SendMessageAsync(embed: greeting.Build());
 
                 // Send a notification to the modmail
                 await channel.SendMessageAsync("@here");
+
+                // Log the ticket creation
+                ITextChannel tc = guild.GetTextChannel(ulong.Parse(_configuration["LOG_CHANNEL_ID"]));
+                if (tc == null) 
+                    return;
+                DateTimeOffset now = DateTimeOffset.UtcNow;
+                await Logger.Log(now, tc, OPEN, $"New ticket opened by {FormatUtil.formatFullUser(author)}", null);
             }
 
             // Get the contents of the message
@@ -81,20 +92,20 @@ namespace Modmail.services
                 return;
 
             // Send a confirmation message to the user
-            var confirmation = new EmbedBuilder().WithTitle("Message Sent")
+            EmbedBuilder confirmation = new EmbedBuilder().WithTitle("Message Sent")
                                                  .WithColor(0x00FF00) // green
                                                  .WithDescription(content)
-                                                 .WithFooter($"{guild.Name} | {guild.Id} • {message.Timestamp.ToLocalTime().ToString("MM/dd/yyyy hh:mm tt")}");
+                                                 .WithFooter(LogUtil.FooterFormat(guild.Name, guild.Id, message.Timestamp));
             if (imageurl is not null)
                 confirmation.WithImageUrl(imageurl);
             await author.SendMessageAsync(embed: confirmation.Build());
 
             // Send the message to the modmail
-            var modmail = new EmbedBuilder().WithAuthor(author.Username, author.GetAvatarUrl())
+            EmbedBuilder modmail = new EmbedBuilder().WithAuthor(author.Username, author.GetAvatarUrl())
                                             .WithTitle("Message Received")
                                             .WithColor(0xFF4400) // red
                                             .WithDescription(content)
-                                            .WithFooter($"{guild.Name} | {guild.Id} • {message.Timestamp.ToLocalTime().ToString("MM/dd/yyyy hh:mm tt")}");
+                                            .WithFooter(LogUtil.FooterFormat(guild.Name, guild.Id, message.Timestamp));
             if (imageurl is not null)
                 modmail.WithImageUrl(imageurl);
             await channel.SendMessageAsync(embed: modmail.Build());

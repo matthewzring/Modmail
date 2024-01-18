@@ -2,12 +2,18 @@
 using Discord.Commands;
 using Discord.WebSocket;
 using Microsoft.Extensions.Configuration;
+using Modmail.logging;
+using Modmail.utils;
 
 namespace Modmail.modules
 {
     public class ThreadModule : ModuleBase
     {
         private readonly IConfiguration _configuration;
+
+        private const string CLOSE = "\uD83D\uDCEA"; // 📪
+        private const string VIEW = "\uD83D\uDCC4"; // 📄
+        private const string DOWNLOAD = "\uD83D\uDCE9"; // 📩
 
         public ThreadModule(IConfiguration configuration)
         {
@@ -33,18 +39,18 @@ namespace Modmail.modules
             SocketUser user = (SocketUser)await Context.Client.GetUserAsync(userId).ConfigureAwait(false);
 
             // Generate the anonymous reply embed 
-            var response = new EmbedBuilder().WithAuthor(Context.Client.CurrentUser.Username, Context.Client.CurrentUser.GetAvatarUrl())
+            EmbedBuilder response = new EmbedBuilder().WithAuthor(Context.Client.CurrentUser.Username, Context.Client.CurrentUser.GetAvatarUrl())
                                              .WithTitle("Message Received")
                                              .WithColor(0xFF4400) // red
                                              .WithDescription(message)
-                                             .WithFooter($"{Context.Guild.Name} | {Context.Guild.Id} • {now.ToString("MM/dd/yyyy hh:mm tt")}");
+                                             .WithFooter(LogUtil.FooterFormat(Context.Guild.Name, Context.Guild.Id, now));
 
             // Build the confirmation message
-            var confirmation = new EmbedBuilder().WithAuthor(Context.User.Username, Context.User.GetAvatarUrl())
+            EmbedBuilder confirmation = new EmbedBuilder().WithAuthor(Context.User.Username, Context.User.GetAvatarUrl())
                                                  .WithTitle("Message Sent")
                                                  .WithColor(0x00FF00) // green
                                                  .WithDescription(message)
-                                                 .WithFooter($"{Context.Guild.Name} | {Context.Guild.Id} • {now.ToString("MM/dd/yyyy hh:mm tt")}");
+                                                 .WithFooter(LogUtil.FooterFormat(Context.Guild.Name, Context.Guild.Id, now));
 
             try
             {
@@ -82,10 +88,10 @@ namespace Modmail.modules
             SocketUser user = (SocketUser)await Context.Client.GetUserAsync(userId).ConfigureAwait(false);
 
             // Build the notification
-            var notification = new EmbedBuilder().WithTitle("Thread Closed")
+            EmbedBuilder notification = new EmbedBuilder().WithTitle("Thread Closed")
                                                   .WithColor(0xFF4400) // red
                                                   .WithDescription("This thread has been closed. Replying will create a new thread.")
-                                                  .WithFooter($"{Context.Guild.Name} | {Context.Guild.Id} • {now.ToString("MM/dd/yyyy hh:mm tt")}");
+                                                  .WithFooter(LogUtil.FooterFormat(Context.Guild.Name, Context.Guild.Id, now));
 
             try
             {
@@ -94,6 +100,27 @@ namespace Modmail.modules
 
                 // Delete the channel
                 await channel.DeleteAsync();
+
+                // Log the ticket closure
+                ITextChannel tc = await Context.Guild.GetTextChannelAsync(ulong.Parse(_configuration["LOG_CHANNEL_ID"]));
+                if (tc == null)
+                    return;
+                
+                /*
+                Color botHighestRoleColor = Color.Default;
+                if (Context.Client.CurrentUser is SocketGuildUser guildUser)
+                {
+                    IEnumerable<SocketRole> filterOutDefault = guildUser.Roles.Where(r => r.Color != Color.Default);
+                    if (!filterOutDefault.Count().Equals(0))
+                        botHighestRoleColor = filterOutDefault.MaxBy(r => r.Position).Color;
+                }
+                string view = "https://example.com";
+                string download = "https://example.com";
+                EmbedBuilder log = new EmbedBuilder().WithColor(botHighestRoleColor)
+                                                    .WithDescription($"[`{VIEW} View`]({view})  |  [`{DOWNLOAD} Download`]({download})");
+                */
+
+                await Logger.Log(now, tc, CLOSE, $"Ticket by {FormatUtil.formatFullUser(user)} was closed", null);
             }
             catch (Exception e)
             {
