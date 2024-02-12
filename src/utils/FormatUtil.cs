@@ -1,5 +1,4 @@
 ﻿using Discord;
-using System.Text;
 
 namespace Modmail.utils
 {
